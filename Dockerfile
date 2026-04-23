@@ -1,14 +1,17 @@
-# Usar la imagen base de N8N
-FROM n8nio/n8n:latest
+# Usar Debian como base
+FROM debian:bookworm-slim
 
-USER root
-
-# Determinar si es Alpine o Debian/Ubuntu e instalar dependencias apropiadas
-RUN if [ -f /etc/alpine-release ]; then \
-    apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-dejavu tini nodejs npm; \
-    else \
-    apt-get update && apt-get install -y --no-install-recommends \
+# Instalar Node.js, npm y dependencias de Puppeteer/Chromium
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    ca-certificates \
+    wget \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends \
+    nodejs \
     chromium-browser \
+    chromium-driver \
     fonts-liberation \
     libappindicator3-1 \
     libasound2 \
@@ -40,26 +43,35 @@ RUN if [ -f /etc/alpine-release ]; then \
     libxrender1 \
     libxss1 \
     libxtst6 \
-    wget \
-    ca-certificates && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*; \
-    fi
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Instalar Puppeteer globalmente
 RUN npm install -g puppeteer
 
-# Variables de entorno para Puppeteer
+# Instalar N8N globalmente
+RUN npm install -g n8n
+
+# Crear usuario para N8N
+RUN useradd -m -u 1000 n8n
+
+# Crear directorio de datos
+RUN mkdir -p /home/n8n/.n8n && \
+    chown -R n8n:n8n /home/n8n
+
+# Cambiar a usuario n8n
+USER n8n
+WORKDIR /home/n8n
+
+# Variables de entorno
+ENV NODE_ENV=production
+ENV N8N_PERSISTENCE_POSTGRESDB_HOST=postgres
+ENV N8N_PERSISTENCE_POSTGRESDB_PORT=5432
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
-
-# Permitir módulos en Code nodes
-ENV N8N_CODE_EXECUTION_MODE=own
-
-# Volver al usuario de n8n
-USER node
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Exponer puerto
 EXPOSE 5678
 
 # Comando de inicio
-CMD ["n8n"]
+CMD ["n8n", "start"]
